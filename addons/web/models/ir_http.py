@@ -134,8 +134,10 @@ class Http(models.AbstractModel):
                 "load_menus": hashlib.sha512(menu_json_utf8).hexdigest()[:64], # sha512/256
             })
             # We need sudo since a user may not have access to ancestor companies
-            disallowed_ancestor_companies_sudo = user.company_ids.sudo().parent_ids - user.company_ids
-            all_companies_in_hierarchy_sudo = disallowed_ancestor_companies_sudo + user.company_ids
+            disallowed_ancestor_company_ids = set(user.company_ids.sudo().parent_ids.ids) - set(user.company_ids.ids)
+            disallowed_ancestor_companies_sudo = self.env['res.company'].sudo().browse(disallowed_ancestor_company_ids)
+            user_company_ids = set(user.company_ids.ids)
+            all_company_ids_in_hierarchy_sudo = set(disallowed_ancestor_companies_sudo.ids) | user_company_ids
             session_info.update({
                 # current_company should be default_company
                 "user_companies": {
@@ -145,7 +147,7 @@ class Http(models.AbstractModel):
                             'id': comp.id,
                             'name': comp.name,
                             'sequence': comp.sequence,
-                            'child_ids': (comp.child_ids & user.company_ids).ids,
+                            'child_ids': list((set(comp.child_ids.ids) & user_company_ids)),
                             'parent_id': comp.parent_id.id,
                         } for comp in user.company_ids
                     },
@@ -154,7 +156,7 @@ class Http(models.AbstractModel):
                             'id': comp.id,
                             'name': comp.name,
                             'sequence': comp.sequence,
-                            'child_ids': (comp.child_ids & all_companies_in_hierarchy_sudo).ids,
+                            'child_ids': list((set(comp.child_ids.ids) & all_company_ids_in_hierarchy_sudo)),
                             'parent_id': comp.parent_id.id,
                         } for comp in disallowed_ancestor_companies_sudo
                     },
